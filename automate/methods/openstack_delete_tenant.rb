@@ -101,6 +101,12 @@ def clean_network(tenant_id)
       openstack_neutron.delete_router(router["id"])
     }
     end
+    # get a list of security groups for the tennat
+    security_group_list = openstack_neutron.get_security_groups.body["security_groups"].select do |sg|
+      sg["tenant_id"] == tenant_id
+    end
+    # previous returns an array of hashes, so we need to work through each one to get id for each security group and delete
+    security_group_list.each { |sg| openstack_neutron.delete_security_group(sg["id"]) }
     # consider adding in security group cleanup as well
 end
 
