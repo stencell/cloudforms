@@ -85,18 +85,23 @@ def clean_network(tenant_id)
   #defaulting to admin so we can see all network objects
   openstack_neutron = get_fog_object('Network')
   router_list = openstack_neutron.list_routers.body["routers"].select { |r| r["tenant_id"] == tenant_id }
+  port_list = openstack_neutron.list_ports.body["ports"].select { |p| p["tenant_id"] == tenant_id }
   log_and_update_message(:info, "The router list for #{tenant_id} is #{router_list.inspect}")
   # as long as there are routers to delete, lets get to deleting
     unless router_list.nil?
     router_list.each { |router|
       log_and_update_message(:info, "Removing interfaces from router #{router["name"]}")
-      # have to pass the router_id, subnet_id to remove_router_interface
-      # first, have to figure out what the subnet_id for the internal interface is...it does not get returned with get_router
-      # the external interface will be deleted when the router is removed
+      # get the list of internal router interface ports
+      router_internal_ports = port_list.select { |port| port["device_id"] == router["id"] &&
+        port"device_owner"] == "network:router_interface" }
+      # for each of the ports identified, remove them from the router
+      router_internal_ports.each { |p| openstack_neutron.remove_router_interface(router["id"], p["fixed_ips"][0]["subnet_id"])}
+      # remove the router once all the ports are gone
       log_and_update_message(:info, "Deleting router #{router["name"]} from tenant #{tenant_id}")
-      openstack_neutron.delete_router(router["id"]) 
+      openstack_neutron.delete_router(router["id"])
     }
-  end
+    end
+    # consider adding in security group cleanup as well
 end
 
 begin
