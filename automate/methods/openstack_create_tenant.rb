@@ -39,6 +39,7 @@ def get_fog_object(type='Compute', tenant='admin', endpoint='publicURL')
     :openstack_api_key => @provider.authentication_password,
     :openstack_username => @provider.authentication_userid,
     :openstack_auth_url => "#{proto}://#{@provider.hostname}:#{@provider.port}#{conn_ref}",
+    # in a OSPd environment, this might need to be commented out depending on accessibility of endpoints
     :openstack_endpoint_type => endpoint,
     :openstack_tenant => tenant,
   }
