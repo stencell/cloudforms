@@ -133,7 +133,7 @@ begin
   raise "no tenant found" if retired_tenant_id.nil?
 
   # Add network cleanup here before we process actual tenant delete
-  # clean_network(retired_tenant_id)
+  clean_network(retired_tenant_id)
 
   openstack_keystone = get_fog_object('Identity', tenant.name)
 
