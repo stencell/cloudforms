@@ -2,8 +2,7 @@
   openstack_delete_tenant.rb
 
   Author: Nate Stephany <nate@redhat.com>, David Costakos <dcostako@redhat.com>,
-          Kevin Morey <kevin@redhat.com>,
-          
+          Kevin Morey <kevin@redhat.com>
 
   Description: This method deletes an openstack tenant as a retirement state
                machine. Service must have at least the "tenant_name" custom
