@@ -1,5 +1,5 @@
 =begin
-  neutron_create_network.rb
+  openstack_create_network.rb
 
   Author: Nate Stephany <nate@redhat.com>, Kevin Morey <kevin@redhat.com>
 

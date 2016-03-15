@@ -1,5 +1,5 @@
 =begin
-  keystone_create_tenant.rb
+  openstack_create_tenant.rb
 
   Author: Nate Stephany <nate@redhat.com>, Kevin Morey <kevin@redhat.com>
 

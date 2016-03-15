@@ -1,5 +1,5 @@
 =begin
-  keystone_set_quota.rb
+  openstack_set_quota.rb
 
   Author: Nate Stephany <nate@redhat.com>, Kevin Morey <kevin@redhat.com>
 

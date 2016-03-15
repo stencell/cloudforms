@@ -1,8 +1,9 @@
 =begin
-  keystone_delete_tenant.rb
+  openstack_delete_tenant.rb
 
-  Author: David Costakos <dcostako@redhat.com>, Kevin Morey <kevin@redhat.com>,
-          Nate Stephany <nate@redhat.com>
+  Author: Nate Stephany <nate@redhat.com>, David Costakos <dcostako@redhat.com>,
+          Kevin Morey <kevin@redhat.com>,
+          
 
   Description: This method deletes an openstack tenant as a retirement state
                machine. Service must have at least the "tenant_name" custom
@@ -86,6 +87,7 @@ def clean_network(tenant_id)
   openstack_neutron = get_fog_object('Network')
   router_list = openstack_neutron.list_routers.body["routers"].select { |r| r["tenant_id"] == tenant_id }
   port_list = openstack_neutron.list_ports.body["ports"].select { |p| p["tenant_id"] == tenant_id }
+  network_list = openstack_neutron.list_networks.body["networks"].select { |n| n["tenant_id" == tenant_id] }
   log_and_update_message(:info, "The router list for #{tenant_id} is #{router_list.inspect}")
   # as long as there are routers to delete, lets get to deleting
     unless router_list.nil?
@@ -103,7 +105,9 @@ def clean_network(tenant_id)
     }
     end
     
-    #need to add the network/subnet deletion
+  # delete all networks associated with the tenant...this also cleans up subnets
+  network_list.each { |nw| openstack_neutron.delete_network(nw["id"]) }
+  log_and_update_message(:info, "Deleted networks: #{network_list.inspect}")
 
   # get a list of security groups for the tennat
   security_group_list = openstack_neutron.list_security_groups.body["security_groups"].select do |sg|
@@ -111,7 +115,7 @@ def clean_network(tenant_id)
   end
   # previous returns an array of hashes, so we need to work through each one to get id for each security group and delete
   security_group_list.each { |sg| openstack_neutron.delete_security_group(sg["id"]) }
-  # consider adding in security group cleanup as well
+  log_and_update_message(:info, "Deleted security groups: #{security_group_list.inspect}")
 end
 
 begin
