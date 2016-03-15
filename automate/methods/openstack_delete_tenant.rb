@@ -41,7 +41,7 @@ def get_fog_object(type='Compute', tenant='admin', endpoint='publicURL')
     :openstack_api_key => @provider.authentication_password,
     :openstack_username => @provider.authentication_userid,
     :openstack_auth_url => "#{proto}://#{@provider.hostname}:#{@provider.port}#{conn_ref}",
-    :openstack_endpoint_type => endpoint,
+    #:openstack_endpoint_type => endpoint,
     :openstack_tenant => tenant,
   }
   # if the openstack environment is using keystone v3, add two keys to hash and replace the auth_url
@@ -92,8 +92,9 @@ def clean_network(tenant_id)
     router_list.each { |router|
       log_and_update_message(:info, "Removing interfaces from router #{router["name"]}")
       # get the list of internal router interface ports
-      router_internal_ports = port_list.select { |port| port["device_id"] == router["id"] &&
-        port"device_owner"] == "network:router_interface" }
+      router_internal_ports = port_list.select do |port| 
+        port["device_id"] == router["id"] && port["device_owner"] == "network:router_interface"
+      end
       # for each of the ports identified, remove them from the router
       router_internal_ports.each { |p| openstack_neutron.remove_router_interface(router["id"], p["fixed_ips"][0]["subnet_id"])}
       # remove the router once all the ports are gone
@@ -101,13 +102,16 @@ def clean_network(tenant_id)
       openstack_neutron.delete_router(router["id"])
     }
     end
-    # get a list of security groups for the tennat
-    security_group_list = openstack_neutron.get_security_groups.body["security_groups"].select do |sg|
-      sg["tenant_id"] == tenant_id
-    end
-    # previous returns an array of hashes, so we need to work through each one to get id for each security group and delete
-    security_group_list.each { |sg| openstack_neutron.delete_security_group(sg["id"]) }
-    # consider adding in security group cleanup as well
+    
+    #need to add the network/subnet deletion
+
+  # get a list of security groups for the tennat
+  security_group_list = openstack_neutron.list_security_groups.body["security_groups"].select do |sg|
+    sg["tenant_id"] == tenant_id
+  end
+  # previous returns an array of hashes, so we need to work through each one to get id for each security group and delete
+  security_group_list.each { |sg| openstack_neutron.delete_security_group(sg["id"]) }
+  # consider adding in security group cleanup as well
 end
 
 begin
