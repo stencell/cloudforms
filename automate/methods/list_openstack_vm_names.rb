@@ -50,15 +50,6 @@ def get_provider(provider_id=nil)
   provider ? (return provider) : (return nil)
 end
 
-def get_provider_from_template(template_guid=nil)
-  $evm.root.attributes.detect { |k,v| template_guid = v if k.end_with?('_guid') } rescue nil
-  template = $evm.vmdb(:template_openstack).find_by_guid(template_guid)
-  return nil unless template
-  provider = $evm.vmdb(:ManageIQ_Providers_Openstack_CloudManager).find_by_id(template.ems_id)
-  log_and_update_message(:info, "Found provider: #{provider.name} via template.ems_id: #{template.ems_id}") if provider
-  provider ? (return provider) : (return nil)
-end
-
 def get_user
   user_search = $evm.root['dialog_userid'] || $evm.root['dialog_evm_owner_id']
   user = $evm.vmdb('user').find_by_id(user_search) ||
@@ -67,7 +58,8 @@ def get_user
   user
 end
 
-def get_current_group_rbac_array(user, rbac_array = [])
+def get_current_group_rbac_array
+  rbac_array = []
   unless @user.current_group.filters.blank?
     @user.current_group.filters['managed'].flatten.each do |filter|
       next unless /(?<category>\w*)\/(?<tag>\w*)$/i =~ filter
@@ -79,6 +71,7 @@ def get_current_group_rbac_array(user, rbac_array = [])
 end
 
 def object_eligible?(obj)
+
   @rbac_array.each do |rbac_hash|
     rbac_hash.each do |rbac_category, rbac_tags|
       Array.wrap(rbac_tags).each {|rbac_tag_entry| return false unless obj.tagged_with?(rbac_category, rbac_tag_entry) }
@@ -103,6 +96,8 @@ begin
   log_and_update_message(:info, "provider: #{@provider.name} provider id: #{@provider.id}")
 
   openstack_vm_list = $evm.vmdb(:ManageIQ_Providers_Openstack_CloudManager_Vm).all
+  user_vm_list = @user.vms
+  user_vm_list.each { |vm| dialog_hash[vm[:name]] = "#{vm.name}" }
 
   openstack_vm_list.each do |vm| 
     next if vm.archived || vm.orphaned
