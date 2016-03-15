@@ -68,8 +68,8 @@ def get_user
 end
 
 def get_current_group_rbac_array(user, rbac_array = [])
-  unless user.current_group.filters.blank?
-    user.current_group.filters['managed'].flatten.each do |filter|
+  unless @user.current_group.filters.blank?
+    @user.current_group.filters['managed'].flatten.each do |filter|
       next unless /(?<category>\w*)\/(?<tag>\w*)$/i =~ filter
       rbac_array << {category=>tag}
     end
@@ -78,13 +78,13 @@ def get_current_group_rbac_array(user, rbac_array = [])
   rbac_array
 end
 
-def vm_eligible?(vm, provider_id=nil)
-  return false if vm.archived || vm.orphaned
-  if provider_id
-    return false unless vm.ems_id == provider_id
+def object_eligible?(obj)
+  @rbac_array.each do |rbac_hash|
+    rbac_hash.each do |rbac_category, rbac_tags|
+      Array.wrap(rbac_tags).each {|rbac_tag_entry| return false unless obj.tagged_with?(rbac_category, rbac_tag_entry) }
+    end
+    true
   end
-  # need to add an rbac check in here to make sure the user is an owner of the VM
-  true
 end
 
 begin
@@ -96,17 +96,17 @@ begin
   options_hash = {}
 
   # gathering some basic variables for use here and there
-  user = get_user
-  rbac_array = get_current_group_rbac_array(user)
+  @user = get_user
+  @rbac_array = get_current_group_rbac_array
   provider_id =  $evm.root['dialog_provider_id'] || options_hash['provider_id']
-  
   @provider = get_provider(provider_id)
   log_and_update_message(:info, "provider: #{@provider.name} provider id: #{@provider.id}")
 
   openstack_vm_list = $evm.vmdb(:ManageIQ_Providers_Openstack_CloudManager_Vm).all
 
   openstack_vm_list.each do |vm| 
-    if vm_eligible?(vm, @provider.id)
+    next if vm.archived || vm.orphaned
+    if object_eligible?(vm)
       dialog_hash[vm[:name]] = "#{vm.name}"
     end
   end
