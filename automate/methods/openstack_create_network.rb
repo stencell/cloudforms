@@ -74,7 +74,6 @@ end
 def create_tenant_net(options_hash)
   openstack_neutron = get_fog_object('Network')
   openstack_keystone = get_fog_object('Identity')
-  ext_net = openstack_neutron.list_networks.body["networks"].detect { |n| n["name"] == "#{options_hash["public_network"]}" }["id"]
   
   # create router first using the external network provided in dialog
   router = openstack_neutron.create_router("#{options_hash["tenant_name"]}_router",
@@ -82,7 +81,7 @@ def create_tenant_net(options_hash)
       :tenant_id => options_hash["tenant_id"],
       :external_gateway_info => 
         {
-          :network_id => ext_net
+          :network_id => options_hash["public_network"]
         }
     }
   )[:body]["router"]

@@ -1,10 +1,10 @@
 =begin
-  list_openstack_vm_names.rb
+  list_openstack_external_net_ids.rb
 
   Author: Nate Stephany <nate@redhat.com>, Kevin Morey <kevin@redhat.com>
 
-  Description: This method pulls back a list of OpenStack VMs and passes
-               the name
+  Description: This method pulls back a list of OpenStack external networks
+               and passes the ID
 
   Mandatory dialog fields: none
   Optional dialog fields: none
