@@ -96,7 +96,7 @@ begin
   if dialog_hash.blank?
     dialog_hash[''] = "< No External Nets found. Contact Admin >"
   else
-    dialog_hash[''] = "< choose a network >"
+    $evm.object['default_value'] = dialog_hash.first[0]
   end
 
   $evm.object['values'] = dialog_hash
