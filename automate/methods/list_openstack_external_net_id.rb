@@ -36,6 +36,28 @@ def dump_root()
   log_and_update_message(:info, "")
 end
 
+def get_fog_object(type='Compute', tenant='admin', endpoint='publicURL')
+  require 'fog'
+  (@provider.api_version == 'v2') ? (conn_ref = '/v2.0/tokens') : (conn_ref = '/v3/auth/tokens')
+  (@provider.security_protocol == 'non-ssl') ? (proto = 'http') : (proto = 'https')
+  
+  connection_hash = {
+    :provider => 'OpenStack',
+    :openstack_api_key => @provider.authentication_password,
+    :openstack_username => @provider.authentication_userid,
+    :openstack_auth_url => "#{proto}://#{@provider.hostname}:#{@provider.port}#{conn_ref}",
+    :openstack_endpoint_type => endpoint,
+    :openstack_tenant => tenant,
+  }
+  # if the openstack environment is using keystone v3, add two keys to hash and replace the auth_url
+  if @provider.api_version == 'v3'
+    connection_hash[:openstack_domain_name] = 'Default'
+    connection_hash[:openstack_project_name] = tenant
+    connection_hash[:openstack_auth_url] = "#{proto}://#{@provider.hostname}:35357/#{conn_ref}"
+  end
+  return Object::const_get("Fog").const_get("#{type}").new(connection_hash)
+end
+
 def get_provider(provider_id=nil)
   if provider_id.blank?
     $evm.root.attributes.detect { |k,v| provider_id = v if k.end_with?('provider_id') } rescue nil
@@ -50,35 +72,6 @@ def get_provider(provider_id=nil)
   provider ? (return provider) : (return nil)
 end
 
-def get_user
-  user_search = $evm.root['dialog_userid'] || $evm.root['dialog_evm_owner_id']
-  user = $evm.vmdb('user').find_by_id(user_search) ||
-    $evm.vmdb('user').find_by_userid(user_search) ||
-    $evm.root['user']
-  user
-end
-
-def get_current_group_rbac_array
-  rbac_array = []
-  unless @user.current_group.filters.blank?
-    @user.current_group.filters['managed'].flatten.each do |filter|
-      next unless /(?<category>\w*)\/(?<tag>\w*)$/i =~ filter
-      rbac_array << {category=>tag}
-    end
-  end
-  log_and_update_message(:info, "rbac filters: #{rbac_array}")
-  rbac_array
-end
-
-def object_eligible?(obj)
-  @rbac_array.each do |rbac_hash|
-    rbac_hash.each do |rbac_category, rbac_tags|
-      Array.wrap(rbac_tags).each {|rbac_tag_entry| return false unless obj.tagged_with?(rbac_category, rbac_tag_entry) }
-    end
-    true
-  end
-end
-
 begin
   dump_root()
 
@@ -88,36 +81,27 @@ begin
   options_hash = {}
 
   # gathering some basic variables for use here and there
-  @user = get_user
-  @rbac_array = get_current_group_rbac_array
   provider_id =  $evm.root['dialog_provider_id'] || options_hash['provider_id']
   @provider = get_provider(provider_id)
   log_and_update_message(:info, "provider: #{@provider.name} provider id: #{@provider.id}")
 
-  user_vm_list = @user.vms
-  user_vm_list.each do |vm|
-    unless vm.archived || vm.orphaned
-      dialog_hash[vm.uid_ems] = "#{vm.name} on #{vm.ext_management_system.name}"
-    end
+  openstack_neutron = get_fog_object('Network')
+  ext_net_list = openstack_neutron.list_networks.body["networks"].select do |net|
+    net["router:external"] == true
   end
-
-  openstack_vm_list = $evm.vmdb(:ManageIQ_Providers_Openstack_CloudManager_Vm).all
-  openstack_vm_list.each { |x| x.evm_owner_id == @user.id }
-
-  openstack_vm_list.each do |vm| 
-    next if vm.archived || vm.orphaned
-
-    if object_eligible?(vm)
-      dialog_hash[vm.uid_ems] = "#{vm.name} on #{vm.ext_management_system.name}"
-    end
+  ext_net_list.each do |net|
+    dialog_hash[net["id"]] = "#{net["name"]} in #{@provider.name}"
   end
 
   if dialog_hash.blank?
-    dialog_hash[''] = "< No VMs found. Contact Administrator >"
+    dialog_hash[''] = "< No External Nets found. Contact Admin >"
   else
-    dialog_hash[''] = "< choose a VM >"
+    dialog_hash[''] = "< choose a network >"
   end
 
   $evm.object['values'] = dialog_hash
   log_and_update_message(:info, "$evm.object['values']: #{$evm.object['values'].inspect}")
 end
+
+
+
