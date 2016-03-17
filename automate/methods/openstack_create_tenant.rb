@@ -40,9 +40,9 @@ def get_fog_object(type='Compute', tenant='admin', endpoint='publicURL')
     :openstack_username => @provider.authentication_userid,
     :openstack_auth_url => "#{proto}://#{@provider.hostname}:#{@provider.port}#{conn_ref}",
     # in a OSPd environment, this might need to be commented out depending on accessibility of endpoints
-    :openstack_endpoint_type => endpoint,
     :openstack_tenant => tenant,
   }
+  connection_hash[:openstack_endpoint_type] = endpoint if type == 'Identity'
   # if the openstack environment is using keystone v3, add two keys to hash and replace the auth_url
   if @provider.api_version == 'v3'
     connection_hash[:openstack_domain_name] = 'Default'
@@ -139,7 +139,7 @@ begin
   log_and_update_message(:info, "provider: #{@provider.name} admin_tenant: #{admin_tenant}")
   options_hash['provider_id'] = @provider.id
 
-  openstack_keystone = get_fog_object('Identity', admin_tenant)
+  openstack_keystone = get_fog_object('Identity', admin_tenant, 'adminURL')
 
   # Checks with OpenStack provider to ensure this tenant name is not already in use
   # If it is, a new name will be created by appending 3 integers to end of requested name
@@ -147,7 +147,7 @@ begin
     for i in (1..999)
       tmp_tenant_name = "#{tenant_name}" + "#{i}".rjust(3, '0')
       log_and_update_message(:info, "Checking for existence of tenant: #{tmp_tenant_name}")
-      unless openstack_keystone.tenants.detect { |t| t.name == tmp_tenant_name }
+      unless openstack_keystone.list_tenants.body["tenants"].detect { |t| t.name == tmp_tenant_name }
         tenant_name = tmp_tenant_name
         break
       end
@@ -189,6 +189,9 @@ begin
   # refresh the provider to pick up the new cloud_tenant
   @provider.refresh
   update_status(options_hash)
+
+  new_service_name = "Openstack Tenant - #{tenant_name}"
+  @service.name = new_service_name
 
 rescue => err
   log_and_update_message(:error, "[(#{err.class})#{err}]\n#{err.backtrace.join("\n")}")

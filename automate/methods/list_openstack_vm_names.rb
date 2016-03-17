@@ -94,20 +94,9 @@ begin
   @provider = get_provider(provider_id)
   log_and_update_message(:info, "provider: #{@provider.name} provider id: #{@provider.id}")
 
-  user_vm_list = @user.vms
-  user_vm_list.each do |vm|
-    unless vm.archived || vm.orphaned
-      dialog_hash[vm.uid_ems] = "#{vm.name} on #{vm.ext_management_system.name}"
-    end
-  end
-
   openstack_vm_list = $evm.vmdb(:ManageIQ_Providers_Openstack_CloudManager_Vm).all
-  openstack_vm_list.each { |x| x.evm_owner_id == @user.id }
-
-  openstack_vm_list.each do |vm| 
-    next if vm.archived || vm.orphaned
-
-    if object_eligible?(vm)
+  openstack_vm_list.each do |vm|
+    if vm.evm_owner_id == @user.id || object_eligible?(vm)
       dialog_hash[vm.uid_ems] = "#{vm.name} on #{vm.ext_management_system.name}"
     end
   end
