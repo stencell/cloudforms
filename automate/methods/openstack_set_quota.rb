@@ -30,7 +30,7 @@ def log_and_update_message(level, msg, update_message = false)
   @task.message = msg if @task && (update_message || level == 'error')
 end
 
-def get_fog_object(type='Compute', tenant='admin', endpoint='publicURL')
+def get_fog_object(type='Compute', tenant='admin', endpoint='adminURL')
   require 'fog'
   (@provider.api_version == 'v2') ? (conn_ref = '/v2.0/tokens') : (conn_ref = '/v3/auth/tokens')
   (@provider.security_protocol == 'non-ssl') ? (proto = 'http') : (proto = 'https')
@@ -40,9 +40,9 @@ def get_fog_object(type='Compute', tenant='admin', endpoint='publicURL')
     :openstack_api_key => @provider.authentication_password,
     :openstack_username => @provider.authentication_userid,
     :openstack_auth_url => "#{proto}://#{@provider.hostname}:#{@provider.port}#{conn_ref}",
-    :openstack_endpoint_type => endpoint,
     :openstack_tenant => tenant,
   }
+  connection_hash[:openstack_endpoint_type] = endpoint if type == 'Identity'
   # if the openstack environment is using keystone v3, add two keys to hash and replace the auth_url
   if @provider.api_version == 'v3'
     connection_hash[:openstack_domain_name] = 'Default'

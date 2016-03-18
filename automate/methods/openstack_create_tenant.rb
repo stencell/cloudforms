@@ -138,7 +138,7 @@ begin
   log_and_update_message(:info, "provider: #{@provider.name} admin_tenant: #{admin_tenant}")
   options_hash['provider_id'] = @provider.id
 
-  openstack_keystone = get_fog_object('Identity', admin_tenant, 'adminURL')
+  openstack_keystone = get_fog_object('Identity', admin_tenant)
 
   # Checks with OpenStack provider to ensure this tenant name is not already in use
   # If it is, a new name will be created by appending 3 integers to end of requested name
