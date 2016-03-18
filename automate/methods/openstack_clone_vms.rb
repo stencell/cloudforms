@@ -85,26 +85,22 @@ def get_tenant()
   #return user.current_group
 end
 
-def get_volume_id(tenant='admin', vm_name)
+def get_volume_id(tenant='admin', vm_id)
   openstack_nova = get_fog_object('Compute', tenant.name)
   log_and_update_message(:info, "Looking in tenant: #{tenant.name} for volumes")
-  vm = openstack_nova.servers.find { |s| s.name == "#{vm_name}" }
-  vm_id = vm.id
-  log_and_update_message(:info, "The Instance ID of #{vm_name} is #{vm_id}")
-
-  volume = openstack_nova.get_server_volumes("#{vm_id}")
-  volume_id = volume.data[:body]["volumeAttachments"][0].fetch("volumeId")
-  log_and_update_message(:info, "The volume ID of #{vm_name} is #{volume_id}")
+  volume = openstack_nova.get_server_volumes(vm_id)[:body]["volumeAttachments"]
+  volume_id = volume.first.fetch("volumeId")
+  log_and_update_message(:info, "The volume ID of #{vm_id} is #{volume_id}")
 
   return volume_id
 end
 
-def cinder_snapshot(tenant='admin', vm_vol_id, new_vm_name, existing_vm_name)
+def cinder_snapshot(tenant='admin', vm_vol_id, existing_vm_id)
   #create snapshot of vm_name and return uuid of new cinder volume
   openstack_cinder = get_fog_object('Volume', tenant.name)
-  snapshot = openstack_cinder.create_volume_snapshot("#{vm_vol_id}", "Snapshot of #{existing_vm_name} disk", "Snapshot created at #{Time.new}", true)
+  snapshot = openstack_cinder.create_volume_snapshot("#{vm_vol_id}", "Snapshot of VM #{existing_vm_id} disk", "Snapshot created at #{Time.new}", true)
   snapshot_id = snapshot[:body]["snapshot"].fetch("id")
-  log_and_update_message(:info, "Created snapshot of #{existing_vm_name} disk")
+  log_and_update_message(:info, "Created snapshot of #{existing_vm_id} disk")
   return snapshot_id
 
   # save for later when introducing cloning between tenants
@@ -113,15 +109,14 @@ def cinder_snapshot(tenant='admin', vm_vol_id, new_vm_name, existing_vm_name)
   #  snapshot_size, options={:snapshotId => snapshot_id})
   #new_volume_id = new_volume.body["volume"].fetch("id")
   #return new_volume_id
-  end
+end
 
-def create_vm_from_snap(tenant='admin', vm_snap_id, new_vm_name, existing_vm_name)
+def create_vm_from_snap(tenant='admin', vm_snap_id, new_vm_name, existing_vm_id)
   openstack_nova = get_fog_object('Compute', tenant.name)
   openstack_neutron = get_fog_object('Network', tenant.name)
-  vm_details = openstack_nova.servers.find { |s| s.name == "#{existing_vm_name}" }
-  vm_id = vm_details.id
-  flavor_id = vm_details.flavor["id"]
-  net_id = openstack_neutron.list_ports.body["ports"].detect { |port| port["device_id"] == "#{vm_id}" }["network_id"]
+  vm_details = openstack_nova.get_server_details(existing_vm_id)[:body]["server"]
+  flavor_id = vm_details["flavor"]["id"]
+  net_id = openstack_neutron.list_ports.body["ports"].detect { |port| port["device_id"] == "#{existing_vm_id}" }["network_id"]
 
   new_vm = openstack_nova.servers.create(
     {
@@ -187,14 +182,14 @@ begin
   
   unless existing_vms_hash.nil?
     existing_vms_hash.each do |k,v|
-      e_vm = v
-      log_and_update_message(:info, "Current existing VM is: #{e_vm}")
+      e_vm_id = v
+      log_and_update_message(:info, "Current existing VM ID is: #{e_vm_id}")
       search = k.gsub(/e_vm_name/, 'n_vm_name')
-      n_vm = new_vms_hash[search]
-      log_and_update_message(:info, "Current new VM is: #{n_vm}")
-      vm_vol = get_volume_id(tenant, e_vm)
-      vm_snap = cinder_snapshot(tenant, vm_vol, n_vm, e_vm)
-      new_vm = create_vm_from_snap(tenant, vm_snap, n_vm, e_vm)
+      n_vm_name = new_vms_hash[search]
+      log_and_update_message(:info, "Current new VM is: #{n_vm_name}")
+      vm_vol = get_volume_id(tenant, e_vm_id)
+      vm_snap = cinder_snapshot(tenant, vm_vol, e_vm_id)
+      new_vm = create_vm_from_snap(tenant, vm_snap, n_vm_name, e_vm_id)
       log_and_update_message(:info, "VM #{new_vm} successfully created from snapshot")
     end
   end

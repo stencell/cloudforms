@@ -31,7 +31,7 @@ def log_and_update_message(level, msg, update_message = false)
   @task.message = msg if @task && (update_message || level == 'error')
 end
 
-def get_fog_object(type='Compute', tenant='admin', endpoint='publicURL')
+def get_fog_object(type='Compute', tenant='admin', endpoint='adminURL')
   require 'fog'
   (@provider.api_version == 'v2') ? (conn_ref = '/v2.0/tokens') : (conn_ref = '/v3/auth/tokens')
   (@provider.security_protocol == 'non-ssl') ? (proto = 'http') : (proto = 'https')
@@ -41,9 +41,9 @@ def get_fog_object(type='Compute', tenant='admin', endpoint='publicURL')
     :openstack_api_key => @provider.authentication_password,
     :openstack_username => @provider.authentication_userid,
     :openstack_auth_url => "#{proto}://#{@provider.hostname}:#{@provider.port}#{conn_ref}",
-    #:openstack_endpoint_type => endpoint,
     :openstack_tenant => tenant,
   }
+  connection_hash[:openstack_endpoint_type] = endpoint if type == 'Identity'
   # if the openstack environment is using keystone v3, add two keys to hash and replace the auth_url
   if @provider.api_version == 'v3'
     connection_hash[:openstack_domain_name] = 'Default'
@@ -85,9 +85,11 @@ def clean_network(tenant_id)
   #defaulting to admin so we can see all network objects
   openstack_neutron = get_fog_object('Network')
   router_list = openstack_neutron.list_routers.body["routers"].select { |r| r["tenant_id"] == tenant_id }
-  port_list = openstack_neutron.list_ports.body["ports"].select { |p| p["tenant_id"] == tenant_id }
-  network_list = openstack_neutron.list_networks.body["networks"].select { |n| n["tenant_id" == tenant_id] }
   log_and_update_message(:info, "The router list for #{tenant_id} is #{router_list.inspect}")
+  port_list = openstack_neutron.list_ports.body["ports"].select { |p| p["tenant_id"] == tenant_id }
+  log_and_update_message(:info, "The port list for #{tenant_id} is #{port_list.inspect}")
+  network_list = openstack_neutron.list_networks.body["networks"].select { |n| n["tenant_id"] == tenant_id }
+  log_and_update_message(:info, "The network list for #{tenant_id} is #{network_list.inspect}")
   # as long as there are routers to delete, lets get to deleting
     unless router_list.nil?
     router_list.each { |router|
