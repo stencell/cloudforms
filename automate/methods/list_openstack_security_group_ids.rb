@@ -1,5 +1,5 @@
 =begin
-  list_openstack_securitygroup_refs.rb
+  list_openstack_securitygroup_ids.rb
 
   Author: Nate Stephany <nate@redhat.com, Kevin Morey <kmorey@redhat.com>
 
@@ -21,73 +21,86 @@
    limitations under the License.
 -------------------------------------------------------------------------------
 =end
-
 def log_and_update_message(level, msg, update_message = false)
   $evm.log(level, "#{msg}")
   @task.message = msg if @task && (update_message || level == 'error')
 end
 
-def dump_root()
-  log_and_update_message(:info, "Begin $evm.root.attributes")
-  $evm.root.attributes.sort.each { |k, v| log_and_update_message(:info, "\t Attribute: #{k} = #{v}")}
-  log_and_update_message(:info, "End $evm.root.attributes")
-  log_and_update_message(:info, "")
-end
-
-def get_fog_object(type='Compute', tenant='admin', endpoint='adminURL')
-  require 'fog'
-  (@provider.api_version == 'v2') ? (conn_ref = '/v2.0/tokens') : (conn_ref = '/v3/auth/tokens')
-  (@provider.security_protocol == 'non-ssl') ? (proto = 'http') : (proto = 'https')
-  
-  connection_hash = {
-    :provider => 'OpenStack',
-    :openstack_api_key => @provider.authentication_password,
-    :openstack_username => @provider.authentication_userid,
-    :openstack_auth_url => "#{proto}://#{@provider.hostname}:#{@provider.port}#{conn_ref}",
-    :openstack_tenant => tenant,
-  }
-  connection_hash[:openstack_endpoint_type] = endpoint if type == 'Identity'
-  # if the openstack environment is using keystone v3, add two keys to hash and replace the auth_url
-  if @provider.api_version == 'v3'
-    connection_hash[:openstack_domain_name] = 'Default'
-    connection_hash[:openstack_project_name] = tenant
-    connection_hash[:openstack_auth_url] = "#{proto}://#{@provider.hostname}:35357/#{conn_ref}"
-  end
-  return Object::const_get("Fog").const_get("#{type}").new(connection_hash)
-end
-
 def get_provider(provider_id=nil)
-  if provider_id.blank?
-    $evm.root.attributes.detect { |k,v| provider_id = v if k.end_with?('provider_id') } rescue nil
-  end
+  $evm.root.attributes.detect { |k,v| provider_id = v if k.end_with?('provider_id') } rescue nil
   provider = $evm.vmdb(:ManageIQ_Providers_Openstack_CloudManager).find_by_id(provider_id)
-  if provider.nil?
+  log_and_update_message(:info, "Found provider: #{provider.name} via provider_id: #{provider.id}") if provider
+
+  if !provider
     provider = $evm.vmdb(:ManageIQ_Providers_Openstack_CloudManager).first
-    log_and_update_message(:info, "Found provider: #{provider.name} via default method") if provider
-  else
-    log_and_update_message(:info, "Found provider: #{provider.name} via provider_id: #{provider.id}") if provider
+    log_and_update_message(:info, "Found OpenStack: #{provider.name} via default method")
   end
   provider ? (return provider) : (return nil)
 end
 
+def get_provider_from_template(template_guid=nil)
+  $evm.root.attributes.detect { |k,v| template_guid = v if k.end_with?('_guid') } rescue nil
+  template = $evm.vmdb(:ManageIQ_Providers_Openstack_CloudManager_Template).find_by_guid(template_guid)
+  return nil unless template
+  provider = $evm.vmdb(:ManageIQ_Providers_Openstack_CloudManager).find_by_id(template.ems_id)
+  log_and_update_message(:info, "Found provider: #{provider.name} via template.ems_id: #{template.ems_id}") if provider
+  provider ? (return provider) : (return nil)
+end
+
+def query_catalogitem(option_key, option_value=nil)
+  # use this method to query a catalogitem
+  # note that this only works for items not bundles since we do not know which item within a bundle(s) to query from
+  service_template = $evm.root['service_template']
+  unless service_template.nil?
+    begin
+      if service_template.service_type == 'atomic'
+        log_and_update_message(:info, "Catalog item: #{service_template.name}")
+        service_template.service_resources.each do |catalog_item|
+          catalog_item_resource = catalog_item.resource
+          if catalog_item_resource.respond_to?('get_option')
+            option_value = catalog_item_resource.get_option(option_key)
+          else
+            option_value = catalog_item_resource[option_key] rescue nil
+          end
+          log_and_update_message(:info, "Found {#{option_key} => #{option_value}}") if option_value
+        end
+      else
+        log_and_update_message(:info, "Catalog bundle: #{service_template.name} found, skipping query")
+      end
+    rescue
+      return nil
+    end
+  end
+  option_value ? (return option_value) : (return nil)
+end
+
+def get_user
+  user_search = $evm.root.attributes.detect { |k,v| k.end_with?('_evm_owner_id') } ||
+    $evm.root.attributes.detect { |k,v| k.end_with?('_userid') }
+  user = $evm.vmdb(:user).find_by_id(user_search) || $evm.vmdb(:user).find_by_userid(user_search) ||
+    $evm.root['user']
+  user
+end
+
 def get_current_group_rbac_array
   rbac_array = []
-  unless @user.current_group.filters.blank?
+  if !@user.current_group.filters.blank?
     @user.current_group.filters['managed'].flatten.each do |filter|
       next unless /(?<category>\w*)\/(?<tag>\w*)$/i =~ filter
       rbac_array << {category=>tag}
     end
   end
-  log_and_update_message(:info, "rbac filters: #{rbac_array}")
+  log_and_update_message(:info, "@user: #{@user.userid} RBAC filters: #{rbac_array}")
   rbac_array
 end
 
-def get_user
-  user_search = $evm.root['dialog_userid'] || $evm.root['dialog_evm_owner_id']
-  user = $evm.vmdb('user').find_by_id(user_search) ||
-    $evm.vmdb('user').find_by_userid(user_search) ||
-    $evm.root['user']
-  user
+def object_eligible?(obj)
+  @rbac_array.each do |rbac_hash|
+    rbac_hash.each do |rbac_category, rbac_tags|
+      Array.wrap(rbac_tags).each {|rbac_tag_entry| return false unless obj.tagged_with?(rbac_category, rbac_tag_entry) }
+    end
+    true
+  end
 end
 
 def get_tenant(tenant_category=nil, tenant_id=nil)
@@ -114,34 +127,37 @@ def get_tenant(tenant_category=nil, tenant_id=nil)
 end
 
 begin
-  dump_root()
 
-  # initializing a couple of hashes
-  # dialog_hash is what actually contains the contents of the dynamic dropdown
-  dialog_hash = {}
-  options_hash = {}
+  $evm.root.attributes.sort.each { |k, v| log_and_update_message(:info, "\t Attribute: #{k} = #{v}")}
 
-  # gathering some basic variables for use here and there
   @user = get_user
   @rbac_array = get_current_group_rbac_array
-  provider_id =  $evm.root['dialog_provider_id'] || options_hash['provider_id']
-  @provider = get_provider(provider_id)
-  log_and_update_message(:info, "provider: #{@provider.name} provider id: #{@provider.id}")
-
-  # change this to actually pass in tenant if we have a tagging or tenant plan in place
   tenant = get_tenant()
 
-  openstack_neutron = get_fog_object('Network')
-  security_group_list = openstack_neutron.list_security_groups.body["security_groups"].select { |s| s["tenant_id"] == tenant.ems_ref }
-  security_group_list.each do |sg|
-  	dialog_hash[sg["id"]] = "#{sg["name"]}"
+  dialog_hash = {}
+
+  provider = get_provider(query_catalogitem(:src_ems_id)) || get_provider_from_template()
+
+  if provider
+    security_group_list = provider.security_groups.select { |sg| sg.cloud_tenant_id == tenant.id }
+    security_group_list.each do |security_group|
+      next if security_group.name.nil? || security_group.ext_management_system.nil?
+      next unless object_eligible?(security_group)
+      dialog_hash[security_group.id] = "#{security_group.name} on #{security_group.ext_management_system.name}"
+    end
+  else
+    # no provider so list everything
+    $evm.vmdb(:security_group_openstack).all.each do |security_group|
+      next if security_group.name.nil? || security_group.ext_management_system.nil?
+      next unless object_eligible?(security_group)
+      dialog_hash[security_group.id] = "#{security_group.name} on #{security_group.ext_management_system.name}"
+    end
   end
 
   if dialog_hash.blank?
     dialog_hash[''] = "< No Security Groups found. >"
   else
-    #dialog_hash[''] = "< choose a VM >"
-    $evm.object['default_value'] = dialog_hash.find { |k,v| v == "default" }[0]
+    $evm.object['default_value'] = dialog_hash.find { |k,v| v == "default on #{provider.name}" }[0]
     log_and_update_message(:info, "dialog_hash contents: #{dialog_hash.inspect}")
   end
 
