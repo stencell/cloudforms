@@ -1,0 +1,37 @@
+heat_template_version: 2015-04-30
+parameters:
+  public_network:
+    type: string
+    default: public
+    description: floating ip pool name
+  private_network:
+    type: string
+    default: private
+    description: name or id of the private (VXLAN) private_network
+  security_group:
+    type: string
+    default: "simple_security_group"
+    description: name of a security group
+
+resources:
+  server:
+    type: OS::Nova::Server
+    properties:
+      flavor: m1.tiny
+      networks: [{ "network": { get_param: private_network } }]
+      user_data_format: RAW
+      image: cirros
+      user_data: |
+        #!/bin/sh
+        echo "Hello at $(date)" > /root/hello.txt
+
+  floating_ip:
+    type: OS::Nova::FloatingIP
+    properties:
+      pool: { get_param: public_network }
+
+  floating_ip_association:
+    type: OS::Nova::FloatingIPAssociation
+    properties:
+      floating_ip: { get_resource: floating_ip }
+      server_id: { get_resource: server }
