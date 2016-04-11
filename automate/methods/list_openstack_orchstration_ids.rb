@@ -94,9 +94,8 @@ begin
   @provider = get_provider(provider_id)
   log(:info, "provider: #{@provider.name} provider id: #{@provider.id}")
 
-  heat_template_list = $evm.vmdb(:orchestration_template).all.select { |t| t.type == "OrchestrationTemplateHot" }
-  heat_template_list.each do |t|
-    next if t.name.starts_with?("overcloud")
+  $evm.vmdb(:orchestration_template_hot).all.each do |t|
+    next if t.name.include?("overcloud")
     next unless object_eligible?(t)
     dialog_hash[t.id] = "#{t.name}"
   end
@@ -104,7 +103,7 @@ begin
   if dialog_hash.blank?
     dialog_hash[''] = "< no heat templates found >"
   else
-    dialog_hash[''] = "< choose a template >"
+    $evm.object['default_value'] = dialog_hash.first[0]
   end
 
   $evm.object['values'] = dialog_hash
