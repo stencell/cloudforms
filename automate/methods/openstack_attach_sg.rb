@@ -24,17 +24,22 @@ def get_fog_object(type='Compute', tenant='admin', endpoint='adminURL')
   return Object::const_get("Fog").const_get("#{type}").const_get("OpenStack").new(connection_hash)
 end
 
-def attach_osp_sg(vm_id, sg_name, tenant)
+def attach_osp_sg(vm, sg_name, tenant)
   openstack_nova = get_fog_object('Compute', tenant_name)
-  openstack_nova.add_security_group(vm_id, sg_name)
+  openstack_nova.add_security_group(vm, sg_name)
+  sg_list = openstack_nova.get_server_details(vm).body["server"]["security_groups"]
+  return sg_list
 end
 
 @vm = $evm.root('vm')
-provider = @vm.ems_id
-tenant = provider.cloud_tenants.detect { |t| t.id == @vm.cloud_tenant_id }
-log(:info, "vm name: #{@vm.name}, provider: #{@provider.name}, tenant: #{tenant.name}")
+tenant = $evm.vmdb(:cloud_tenant).find_by_id(@vm.cloud_tenant_id)
+log(:info, "vm name: #{@vm.name}, tenant: #{tenant.name}")
 
 # make this dynamic and pull from $evm.root/object
 sg_name = 'new-sec-grp'
+#if doing from dynamic dialog that returns security group IDs
+# provider = $evm.vmdb('ManageIQ_Providers_Openstack_CloudManager').find_by_id(@vm.ems_id)
+# sg_name = provider.security_groups.detect { |sg| sg.id == $evm.root('dialog_whatever') }.name
 
-attach_osp_sg(@vm.id, sg_name, tenant.name)
+new_sg = attach_osp_sg(@vm.uid_ems, sg_name, tenant.name)
+log(:info, "Security groups connected to VM #{@vm.name} are #{new_sg}")
