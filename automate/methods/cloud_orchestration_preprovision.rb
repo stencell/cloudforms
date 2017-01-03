@@ -1,6 +1,30 @@
-#
-# Description: This method prepares arguments and parameters for orchestration provisioning
-#
+=begin
+  preprovision.rb
+
+  Author: Nate Stephany <nate@redhat.com>
+
+  Description: This is an extended preprovision method for deploying OpenStack
+  			   Heat stacks that rely on nested templates. It will read those
+  			   nested templates out of CloudForms and feed them in as a string.
+
+  Mandatory dialog fields: dialog_nested_template_XXX where XXX is the name of
+  						   your nested template yaml file (i.e. worker.yaml)
+-------------------------------------------------------------------------------
+   Copyright 2016 Nate Stephany <nate@redhat.com>
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-------------------------------------------------------------------------------
+=end
 def log(level, msg, update_message = false)
   $evm.log(level, "#{msg}")
   @task.message = msg if @task && (update_message || level == 'error')
@@ -22,11 +46,13 @@ log("info", "stack name = #{service.stack_name}")
 
 # Example how to programmatically modify stack options:
 # service.stack_name = 'new_name'
+=======
+log("info", "manager = #{service.orchestration_manager.name}(#{service.orchestration_manager.id})")
+log("info", "template = #{service.orchestration_template.name}(#{service.orchestration_template.id}))")
+log("info", "stack name = #{service.stack_name}")
+
 service.name = service.stack_name
 stack_options = service.stack_options
-# stack_options[:disable_rollback] = false
-# stack_options[:timeout_mins] = 2 # this option is provider dependent
-# stack_options[:parameters]['flavor'] = 'm1.small'
 
 $evm.root.attributes.sort.each { |k, v| log(:info, "\t $evm.root Attribute - #{k}: #{v}")}
 nested_templates = {}
